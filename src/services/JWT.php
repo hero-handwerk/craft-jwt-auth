@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Craft JWT Auth plugin for Craft CMS 3.x
+ * Craft JWT Auth plugin for Craft CMS 5.x
  *
  * Enable authentication to Craft through the use of JSON Web Tokens (JWT)
  *
@@ -22,8 +22,8 @@ use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Token;
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Validation\Validator;
-use Lcobucci\JWT\Validation\Constraint\RelatedTo;
-use Lcobucci\JWT\Validation\Constraint\HasClaimWithValue;
+use Lcobucci\JWT\Validation\Constraint\SignedWith;
+use Lcobucci\JWT\Signer\Key\InMemory;
 
 /**
  * @author    Mike Pierce
@@ -89,25 +89,16 @@ class JWT extends Component
     */
     public function verifyJWT(Token $token)
     {
-        $secretKey =  getenv('JWT_AUTH_SECRET');
+        $secretKey = getenv('JWT_AUTH_SECRET');
         if(!$secretKey) {
-            $secretKey =  CraftJwtAuth::getInstance()->getSettings()->secretKey;
+            $secretKey = CraftJwtAuth::getInstance()->getSettings()->secretKey;
         }
 
-        // Attempt to verify the token
-        // $verify = $token->verify((new Sha256()), $secretKey);
         $validator = new Validator();
+        $signer = new Sha256();
+        $key = InMemory::plainText($secretKey);
 
-        if (! $validator->validate($token, new RelatedTo($secretKey))) {
-            echo 'Invalid token (1)!', PHP_EOL; // will print this;
-            return 'Invalid token (1)!';
-        }
-
-        if (! $validator->validate($token, new RelatedTo($secretKey))) {
-            echo 'Invalid token (2)!', PHP_EOL; // will not print this;
-            return 'Invalid token (2)!';
-        }
-
+        return $validator->validate($token, new SignedWith($signer, $key));
     }
 
     /*
@@ -116,11 +107,9 @@ class JWT extends Component
     public function getUserByJWT(Token $token)
     {
         if ($this->verifyJWT($token)) {
-            // Derive the username from the subject in the token
-            // $email = $token->getClaim('email', '');
-            $email = new HasClaimWithValue('email', '');
-            // $userName = $token->getClaim('sub', '');
-            $userName = new HasClaimWithValue('sub', '');
+            $email = $token->claims()->get('email', '');
+            $userName = $token->claims()->get('sub', '');
+
             // Look for the user with email
             $user = Craft::$app->users->getUserByUsernameOrEmail($email ?: $userName);
 
@@ -146,16 +135,16 @@ class JWT extends Component
                 $user = new User();
 
                 // Email is a mandatory field
-                if ($token->hasClaim('email')) {
-                    $email = $token->getClaim('email');
+                if ($token->claims()->has('email')) {
+                    $email = $token->claims()->get('email');
 
                     // Set username and email
                     $user->email = $email;
                     $user->username = $email;
 
                     // These are optional, so pass empty string as the default
-                    $user->firstName = $token->getClaim('given_name', '');
-                    $user->lastName = $token->getClaim('family_name', '');
+                    $user->firstName = $token->claims()->get('given_name', '');
+                    $user->lastName = $token->claims()->get('family_name', '');
 
                     // Attempt to save the user
                     $success = Craft::$app->getElements()->saveElement($user);
@@ -166,7 +155,7 @@ class JWT extends Component
                         Craft::$app->users->assignUserToDefaultGroup($user);
 
                         // Look for a picture in the claim
-                        $picture = $token->getClaim('picture', '');
+                        $picture = $token->claims()->get('picture', '');
                         if ($picture) {
                             // Create a guzzel client
                             $guzzle = Craft::createGuzzleClient();
@@ -184,7 +173,7 @@ class JWT extends Component
                             // Fetch it again, this time saving it to a temp file
                             $imageUpload = $guzzle->get($picture, ['save_to' => $tempFile]);
 
-                            // Save the tempfile to the user’s account as profile image
+                            // Save the tempfile to the user's account as profile image
                             Craft::$app->getUsers()->saveUserPhoto($tempFile, $user, $fileName);
                         }
 

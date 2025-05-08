@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Craft JWT Auth plugin for Craft CMS 3.x
+ * Craft JWT Auth plugin for Craft CMS 5.x
  *
  * Enable authentication to Craft through the use of JSON Web Tokens (JWT)
  *
@@ -72,7 +72,7 @@ class CraftJwtAuth extends Plugin
                 }
 
                 // Attempt to login as the user we have found or created
-                if ($user->id) {
+                if ($user && $user->id) {
                     Craft::$app->user->loginByUserId($user->id);
                 }
             }
@@ -104,7 +104,7 @@ class CraftJwtAuth extends Plugin
      */
     protected function settingsHtml(): ?string
     {
-        return Craft::$app->view->renderTemplate(
+        return \Craft::$app->getView()->renderTemplate(
             'craft-jwt-auth/settings',
             [
                 'settings' => $this->getSettings()
